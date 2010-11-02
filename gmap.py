@@ -74,14 +74,6 @@ def main():
             parser.print_help()
             sys.exit(1)
 
-    if options.markers:
-        destdir = args[1]
-
-        # Generate the markers
-        m = markers.MarkerGenerator(worlddir, destdir)
-        m.go(options.procs)
-        sys.exit(0)        
-            
     if not options.cachedir:
         cachedir = worlddir
     else:
