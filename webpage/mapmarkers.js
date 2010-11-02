@@ -73,7 +73,7 @@ function addMarker(item) {
 
 
 function refreshMarkers(){
-    $.getJSON('markers.json', function(data) {
+    $.getJSON('markers.json', function(data) { //!Change to 'markers' if using cache.wsgi
             try {
                 if (data == null || data.length == 0) {
                     $('#plist').html('[No players online]');

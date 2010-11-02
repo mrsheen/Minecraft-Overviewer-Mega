@@ -26,7 +26,9 @@ class Cache:
         def readMarkers(self):
             # load file
             with open(self.file, 'r') as f:
-                self.markers = f.read()
+                temp = f.read()
+            self.markers = temp
+
 
 
 
