@@ -32,7 +32,6 @@ logging.basicConfig(level=logging.INFO,format="%(asctime)s [%(levelname)s] %(mes
 
 import world
 import quadtree
-import markers
 
 helptext = """
 %prog [OPTIONS] <World # / Path to World> <tiles dest dir>
