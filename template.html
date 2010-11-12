@@ -3,17 +3,16 @@
 <head>
 <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
 <title>Minecraft Map</title>
-<style type="text/css">
-  html { height: 100% }
-  body { height: 100%; margin: 0px; padding: 0px ; background-color: #000; }
-</style>
-<link href="styles.css" rel="stylesheet" type="text/css">
 
+<link rel="stylesheet" href="style.css" type="text/css" />
+<script type="text/javascript" src="markers.js"></script>
+<script type="text/javascript" src="regions.js"></script>
 <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js"></script>
 <script type="text/javascript" src="http://maps.google.com/maps/api/js?sensor=false"></script>
 <script type="text/javascript" src="map.js"></script>
 <script type="text/javascript" src="controls.js"></script>
 <script type="text/javascript" src="maprefresh.js"></script>
+
 <script type="text/javascript">
   var config = {
     path:        'tiles',
@@ -29,7 +28,6 @@
   
   config.mapCenter = fromWorldToLatLng({mapcenter});
 </script>
-
 
 </head>
 <body onload="initialize()">

@@ -22,6 +22,7 @@ import logging
 import nbt
 import textures
 import world
+import composite
 
 """
 This module has routines related to rendering one particular chunk into an
@@ -36,7 +37,11 @@ image
 # of the dest image will have its alpha channel modified. To prevent this:
 # first use im.split() and take the third item which is the alpha channel and
 # use that as the mask. Then take the image and use im.convert("RGB") to strip
-# the image from its alpha channel, and use that as the source to paste()
+# the image from its alpha channel, and use that as the source to alpha_over()
+
+# (note that this workaround is NOT technically needed when using the
+# alpha_over extension, BUT this extension may fall back to PIL's
+# paste(), which DOES need the workaround.)
 
 def get_lvldata(filename):
     """Takes a filename and returns the Level struct, which contains all the
@@ -81,6 +86,11 @@ def get_blockdata_array(level):
     in a similar manner to skylight data"""
     return numpy.frombuffer(level['Data'], dtype=numpy.uint8).reshape((16,16,64))
 
+def get_tileentity_data(level):
+    """Returns the TileEntities TAG_List from chunk dat file"""
+    data = level['TileEntities']
+    return data
+
 def iterate_chunkblocks(xoff,yoff):
     """Iterates over the 16x16x128 blocks of a chunk in rendering order.
     Yields (x,y,z,imgx,imgy)
@@ -100,12 +110,12 @@ def iterate_chunkblocks(xoff,yoff):
 transparent_blocks = set([0, 6, 8, 9, 18, 20, 37, 38, 39, 40, 44, 50, 51, 52, 53,
     59, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 74, 75, 76, 77, 78, 79, 81, 83, 85])
 
-def render_and_save(chunkfile, cachedir, worldobj, cave=False):
+def render_and_save(chunkfile, cachedir, worldobj, cave=False, queue=None):
     """Used as the entry point for the multiprocessing workers (since processes
     can't target bound methods) or to easily render and save one chunk
     
     Returns the image file location"""
-    a = ChunkRenderer(chunkfile, cachedir, worldobj)
+    a = ChunkRenderer(chunkfile, cachedir, worldobj, queue)
     try:
         return a.render_and_save(cave)
     except ChunkCorrupt:
@@ -134,21 +144,29 @@ class ChunkCorrupt(Exception):
     pass
 
 class ChunkRenderer(object):
-    def __init__(self, chunkfile, cachedir, worldobj):
+    def __init__(self, chunkfile, cachedir, worldobj, queue):
         """Make a new chunk renderer for the given chunkfile.
         chunkfile should be a full path to the .dat file to process
         cachedir is a directory to save the resulting chunk images to
         """
+        self.queue = queue
+    
         if not os.path.exists(chunkfile):
             raise ValueError("Could not find chunkfile")
         self.chunkfile = chunkfile
         destdir, filename = os.path.split(self.chunkfile)
+        filename_split = filename.split(".")
+        chunkcoords = filename_split[1:3]
         
-        chunkcoords = filename.split(".")[1:3]
         self.coords = map(world.base36decode, chunkcoords)
         self.blockid = ".".join(chunkcoords)
-        self.world = worldobj
 
+        # chunk coordinates (useful to converting local block coords to 
+        # global block coords)
+        self.chunkX = int(filename_split[1], base=36)
+        self.chunkY = int(filename_split[2], base=36)
+
+        self.world = worldobj
         # Cachedir here is the base directory of the caches. We need to go 2
         # levels deeper according to the chunk file. Get the last 2 components
         # of destdir and use that
@@ -300,7 +318,7 @@ class ChunkRenderer(object):
         is up to date, this method doesn't render anything.
         """
         blockid = self.blockid
-
+        
         oldimg, oldimg_path = self.find_oldimage(cave)
 
         if oldimg:
@@ -481,6 +499,8 @@ class ChunkRenderer(object):
         # Odd elements get the upper 4 bits
         blockData_expanded[:,:,1::2] = blockData >> 4
 
+        tileEntities = get_tileentity_data(self.level)
+
 
         # Each block is 24x24
         # The next block on the X axis adds 12px to x and subtracts 6px from y in the image
@@ -511,6 +531,7 @@ class ChunkRenderer(object):
 
             else:
                 t = textures.blockmap[blockid]
+
             if not t:
                 continue
 
@@ -538,7 +559,7 @@ class ChunkRenderer(object):
                 ):
                     continue
             elif cave and (
-                    y == 15 and x == 0
+                    y == 15 and x == 0 and z != 127
             ):
                 # If it's on the facing edge, only render if what's
                 # above it is transparent
@@ -563,36 +584,36 @@ class ChunkRenderer(object):
             # tint the block with a color proportional to its depth
             if cave:
                 # no lighting for cave -- depth is probably more useful
-                img.paste(Image.blend(t[0],depth_colors[z],0.3), (imgx, imgy), t[1])
+                composite.alpha_over(img, Image.blend(t[0],depth_colors[z],0.3), (imgx, imgy), t[1])
             else:
                 if not self.world.lighting:
                     # no lighting at all
-                    img.paste(t[0], (imgx, imgy), t[1])
+                    composite.alpha_over(img, t[0], (imgx, imgy), t[1])
                 elif blockid in transparent_blocks:
                     # transparent means draw the whole
                     # block shaded with the current
                     # block's light
                     black_coeff, _ = self.get_lighting_coefficient(x, y, z)
-                    img.paste(Image.blend(t[0], black_color, black_coeff), (imgx, imgy), t[1])
+                    composite.alpha_over(img, Image.blend(t[0], black_color, black_coeff), (imgx, imgy), t[1])
                 else:
                     # draw each face lit appropriately,
                     # but first just draw the block
-                    img.paste(t[0], (imgx, imgy), t[1])
+                    composite.alpha_over(img, t[0], (imgx, imgy), t[1])
                     
                     # top face
                     black_coeff, face_occlude = self.get_lighting_coefficient(x, y, z + 1)
                     if not face_occlude:
-                        img.paste((0,0,0), (imgx, imgy), ImageEnhance.Brightness(facemasks[0]).enhance(black_coeff))
+                        composite.alpha_over(img, black_color, (imgx, imgy), ImageEnhance.Brightness(facemasks[0]).enhance(black_coeff))
                     
                     # left face
                     black_coeff, face_occlude = self.get_lighting_coefficient(x - 1, y, z)
                     if not face_occlude:
-                        img.paste((0,0,0), (imgx, imgy), ImageEnhance.Brightness(facemasks[1]).enhance(black_coeff))
+                        composite.alpha_over(img, black_color, (imgx, imgy), ImageEnhance.Brightness(facemasks[1]).enhance(black_coeff))
 
                     # right face
                     black_coeff, face_occlude = self.get_lighting_coefficient(x, y + 1, z)
                     if not face_occlude:
-                        img.paste((0,0,0), (imgx, imgy), ImageEnhance.Brightness(facemasks[2]).enhance(black_coeff))
+                        composite.alpha_over(img, black_color, (imgx, imgy), ImageEnhance.Brightness(facemasks[2]).enhance(black_coeff))
 
             # Draw edge lines
             if blockid in (44,): # step block
@@ -609,6 +630,30 @@ class ChunkRenderer(object):
                 if y != 0 and blocks[x,y-1,z] == 0:
                     draw.line(((imgx,imgy+6+increment), (imgx+12,imgy+increment)), fill=(0,0,0), width=1)
 
+
+        for entity in tileEntities:
+            if entity['id'] == 'Sign':
+
+                # convert the blockID coordinates from local chunk
+                # coordinates to global world coordinates
+                newPOI = dict(type="sign",
+                                x= entity['x'],
+                                y= entity['y'],
+                                z= entity['z'],
+                                msg="%s\n%s\n%s\n%s" %
+                                   (entity['Text1'], entity['Text2'], entity['Text3'], entity['Text4']),
+                                chunk= (self.chunkX, self.chunkY),
+                               )
+                self.queue.put(["newpoi", newPOI])
+
+
+        # check to see if there are any signs in the persistentData list that are from this chunk.
+        # if so, remove them from the persistentData list (since they're have been added to the world.POI
+        # list above.
+        self.queue.put(['removePOI', (self.chunkX, self.chunkY)])
+
+            
+
         return img
 
 # Render 3 blending masks for lighting
@@ -623,6 +668,8 @@ def generate_facemasks():
     toppart = textures.transform_image(white)
     leftpart = textures.transform_image_side(white)
     
+    # using the real PIL paste here (not alpha_over) because there is
+    # no alpha channel (and it's mode "L")
     top.paste(toppart, (0,0))
     left.paste(leftpart, (0,6))
     right = left.transpose(Image.FLIP_LEFT_RIGHT)

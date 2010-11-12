@@ -17,8 +17,10 @@ import functools
 import os
 import os.path
 import multiprocessing
+import Queue
 import sys
 import logging
+import cPickle
 
 import numpy
 
@@ -136,6 +138,23 @@ class WorldRenderer(object):
         self.cachedir = cachedir
 
         self.chunkset = chunkset
+
+        #  stores Points Of Interest to be mapped with markers
+        #  a list of dictionaries, see below for an example
+        self.POI = []
+
+        # if it exists, open overviewer.dat, and read in the data structure
+        # info self.persistentData.  This dictionary can hold any information
+        # that may be needed between runs.
+        # Currently only holds into about POIs (more more details, see quadtree)
+        self.pickleFile = os.path.join(self.cachedir,"overviewer.dat")
+        if os.path.exists(self.pickleFile):
+            with open(self.pickleFile,"rb") as p:
+                self.persistentData = cPickle.load(p)
+        else:
+            # some defaults
+            self.persistentData = dict(POI=[])
+
         
     def get_chunk_path(self, chunkX, chunkY):
         """Returns the path to the chunk file at (chunkX, chunkY), if
@@ -148,6 +167,40 @@ class WorldRenderer(object):
         
         return os.path.join(self.worlddir, chunkFile)
     
+    def findTrueSpawn(self):
+        """Adds the true spawn location to self.POI.  The spawn Y coordinate
+        is almost always the default of 64.  Find the first air block above
+        that point for the true spawn location"""
+
+        ## read spawn info from level.dat
+        data = nbt.load(os.path.join(self.worlddir, "level.dat"))[1]
+        spawnX = data['Data']['SpawnX']
+        spawnY = data['Data']['SpawnY']
+        spawnZ = data['Data']['SpawnZ']
+   
+        ## The chunk that holds the spawn location 
+        chunkX = spawnX/16
+        chunkY = spawnZ/16
+
+        ## The filename of this chunk
+        chunkFile = self.get_chunk_path(chunkX, chunkY)
+
+        data=nbt.load(chunkFile)[1]
+        level = data['Level']
+        blockArray = numpy.frombuffer(level['Blocks'], dtype=numpy.uint8).reshape((16,16,128))
+
+        ## The block for spawn *within* the chunk
+        inChunkX = spawnX - (chunkX*16)
+        inChunkZ = spawnZ - (chunkY*16)
+
+        ## find the first air block
+        while (blockArray[inChunkX, inChunkZ, spawnY] != 0):
+            spawnY += 1
+
+
+        self.POI.append( dict(x=spawnX, y=spawnY, z=spawnZ, 
+                msg="Spawn", type="spawn", chunk=(inChunkX,inChunkZ)))
+
     def go(self, procs):
         """Starts the render. This returns when it is finished"""
         
@@ -180,7 +233,7 @@ class WorldRenderer(object):
         all_chunks = []
 
         for dirpath, dirnames, filenames in os.walk(self.worlddir):
-            if not dirnames and filenames:
+            if not dirnames and filenames and "DIM-1" not in dirpath:
                 for f in filenames:
                     if f.startswith("c.") and f.endswith(".dat"):
                         p = f.split(".")
@@ -213,6 +266,9 @@ class WorldRenderer(object):
         
         
         results = {}
+        manager = multiprocessing.Manager()
+        q = manager.Queue()
+
         if processes == 1:
             # Skip the multiprocessing stuff
             logging.debug("Rendering chunks synchronously since you requested 1 process")
@@ -220,14 +276,22 @@ class WorldRenderer(object):
                 if self.chunkset and (col, row) not in self.chunkset:
                     # Skip rendering, just find where the existing image is
                     _, imgpath = chunk.ChunkRenderer(chunkfile,
-                            self.cachedir, self).find_oldimage(False)
+                            self.cachedir, self, q).find_oldimage(False)
                     if imgpath:
                         results[(col, row)] = imgpath
                         continue
 
-                result = chunk.render_and_save(chunkfile, self.cachedir, self, cave=self.caves)
+                result = chunk.render_and_save(chunkfile, self.cachedir, self, cave=self.caves, queue=q)
                 results[(col, row)] = result
                 if i > 0:
+                    try:
+                        item = q.get(block=False)
+                        if item[0] == "newpoi":
+                            self.POI.append(item[1])
+                        elif item[0] == "removePOI":
+                            self.persistentData['POI'] = filter(lambda x: x['chunk'] != item[1], self.persistentData['POI'])
+                    except Queue.Empty:
+                        pass
                     if 1000 % i == 0 or i % 1000 == 0:
                         logging.info("{0}/{1} chunks rendered".format(i, len(chunks)))
         else:
@@ -238,20 +302,29 @@ class WorldRenderer(object):
                 if self.chunkset and (col, row) not in self.chunkset:
                     # Skip rendering, just find where the existing image is
                     _, imgpath = chunk.ChunkRenderer(chunkfile,
-                            self.cachedir, self).find_oldimage(False)
+                            self.cachedir, self, q).find_oldimage(False)
                     if imgpath:
                         results[(col, row)] = imgpath
                         continue
 
                 result = pool.apply_async(chunk.render_and_save,
                         args=(chunkfile,self.cachedir,self),
-                        kwds=dict(cave=self.caves))
+                        kwds=dict(cave=self.caves, queue=q))
                 asyncresults.append((col, row, result))
 
             pool.close()
 
             for i, (col, row, result) in enumerate(asyncresults):
                 results[(col, row)] = result.get()
+                try:
+                    item = q.get(block=False)
+                    if item[0] == "newpoi":
+                        self.POI.append(item[1])
+                    elif item[0] == "removePOI":
+                        self.persistentData['POI'] = filter(lambda x: x['chunk'] != item[1], self.persistentData['POI'])
+
+                except Queue.Empty:
+                    pass
                 if i > 0:
                     if 1000 % i == 0 or i % 1000 == 0:
                         logging.info("{0}/{1} chunks rendered".format(i, len(asyncresults)))

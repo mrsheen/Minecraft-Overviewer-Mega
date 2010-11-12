@@ -21,9 +21,10 @@ from cStringIO import StringIO
 import math
 
 import numpy
-from PIL import Image, ImageEnhance
+from PIL import Image, ImageEnhance, ImageOps
 
 import util
+import composite
 
 def _find_file(filename, mode="rb"):
     """Searches for the given file and returns an open handle to it.
@@ -157,13 +158,13 @@ def transform_image_side(img, blockID=None):
         # img to be unchanged
         mask = img.crop((0,8,16,16))
         n = Image.new(img.mode, img.size, (38,92,255,0))
-        n.paste(mask,(0,0,16,8), mask)
+        composite.alpha_over(n, mask,(0,0,16,8), mask)
         img = n
     if blockID in (78,): # snow
         # make the top three quarters transparent
         mask = img.crop((0,12,16,16))
         n = Image.new(img.mode, img.size, (38,92,255,0))
-        n.paste(mask,(0,12,16,16), mask)
+        composite.alpha_over(n, mask,(0,12,16,16), mask)
         img = n
 
     # Size of the cube side before shear
@@ -189,7 +190,7 @@ def _build_block(top, side, blockID=None):
     top = transform_image(top, blockID)
 
     if not side:
-        img.paste(top, (0,0), top)
+        composite.alpha_over(img, top, (0,0), top)
         return img
 
     side = transform_image_side(side, blockID)
@@ -212,29 +213,29 @@ def _build_block(top, side, blockID=None):
     if blockID in (37,38,6,39,40,50,83): ## flowers, sapling, mushrooms,  regular torch, reeds
         # instead of pasting these blocks at the cube edges, place them in the middle:
         # and omit the top
-        img.paste(side, (6,3), side)
-        img.paste(otherside, (6,3), otherside)
+        composite.alpha_over(img, side, (6,3), side)
+        composite.alpha_over(img, otherside, (6,3), otherside)
         return img
 
 
     if blockID in (81,): # cacti!
-        img.paste(side, (2,6), side)
-        img.paste(otherside, (10,6), otherside)
-        img.paste(top, (0,2), top)
+        composite.alpha_over(img, side, (2,6), side)
+        composite.alpha_over(img, otherside, (10,6), otherside)
+        composite.alpha_over(img, top, (0,2), top)
     elif blockID in (44,): # half step
         # shift each texture down 6 pixels
-        img.paste(side, (0,12), side)
-        img.paste(otherside, (12,12), otherside)
-        img.paste(top, (0,6), top)
+        composite.alpha_over(img, side, (0,12), side)
+        composite.alpha_over(img, otherside, (12,12), otherside)
+        composite.alpha_over(img, top, (0,6), top)
     elif blockID in (78,): # snow
         # shift each texture down 9 pixels
-        img.paste(side, (0,6), side)
-        img.paste(otherside, (12,6), otherside)
-        img.paste(top, (0,9), top)
+        composite.alpha_over(img, side, (0,6), side)
+        composite.alpha_over(img, otherside, (12,6), otherside)
+        composite.alpha_over(img, top, (0,9), top)
     else:
-        img.paste(side, (0,6), side)
-        img.paste(otherside, (12,6), otherside)
-        img.paste(top, (0,0), top)
+        composite.alpha_over(img, side, (0,6), side)
+        composite.alpha_over(img, otherside, (12,6), otherside)
+        composite.alpha_over(img, top, (0,0), top)
 
     # Manually touch up 6 pixels that leave a gap because of how the
     # shearing works out. This makes the blocks perfectly tessellate-able
@@ -267,8 +268,8 @@ def _build_blockimages():
                36, 37, 80, -1, 65,  4, 25,101, 98, 24, 43, -1, 86,  1,  1, -1, # Torch from above? leaving out fire. Redstone wire? Crops/furnaces handled elsewhere. sign post
        #       64  65  66  67  68  69  70  71  72  73  74  75  76  77  78  79
                -1, -1, -1, 16, -1, -1, -1, -1, -1, 51, 51, -1, -1,  1, 66, 67, # door,ladder left out. Minecart rail orientation
-       #       80  81  82  83  84
-               66, 69, 72, 73, 74 # clay?
+       #       80  81  82  83  84  85  86  87  88  89  90  91
+               66, 69, 72, 73, 74, -1,102,103,104,105,-1, 102 # clay?
         ]
 
     # NOTE: For non-block textures, the sideid is ignored, but can't be -1
@@ -284,8 +285,8 @@ def _build_blockimages():
                 36, 37, 80, -1, 65,  4, 25,101, 98, 24, 43, -1, 86, 44, 61, -1,
        #        64  65  66  67  68  69  70  71  72  73  74  75  76  77  78  79
                 -1, -1, -1, 16, -1, -1, -1, -1, -1, 51, 51, -1, -1,  1, 66, 67,
-       #        80  81  82  83  84
-                66, 69, 72, 73, 74
+       #        80  81  82  83  84  85  86  87  88  89  90  91
+                66, 69, 72, 73, 74,-1 ,118,103,104,105, -1, 118
         ]
 
     # This maps block id to the texture that goes on the side of the block
@@ -366,7 +367,7 @@ def generate_special_texture(blockID, data):
             track = transform_image(raw_straight, blockID)
 
         img = Image.new("RGBA", (24,24), (38,92,255,0))
-        img.paste(track, (0,12), track)
+        composite.alpha_over(img, track, (0,12), track)
 
         return (img.convert("RGB"), img.split()[3])
     if blockID == 59: # crops
@@ -376,15 +377,28 @@ def generate_special_texture(blockID, data):
         crop3 = crop2.transpose(Image.FLIP_LEFT_RIGHT)
 
         img = Image.new("RGBA", (24,24), (38,92,255,0))
-        img.paste(crop1, (0,12), crop1)
-        img.paste(crop2, (6,3), crop2)
-        img.paste(crop3, (6,3), crop3)
+        composite.alpha_over(img, crop1, (0,12), crop1)
+        composite.alpha_over(img, crop2, (6,3), crop2)
+        composite.alpha_over(img, crop3, (6,3), crop3)
         return (img.convert("RGB"), img.split()[3])
 
     if blockID == 61: #furnace
         top = transform_image(terrain_images[1])
         side1 = transform_image_side(terrain_images[45])
         side2 = transform_image_side(terrain_images[44]).transpose(Image.FLIP_LEFT_RIGHT)
+
+        img = Image.new("RGBA", (24,24), (38,92,255,0))
+
+        composite.alpha_over(img, side1, (0,6), side1)
+        composite.alpha_over(img, side2, (12,6), side2)
+        composite.alpha_over(img, top, (0,0), top)
+        return (img.convert("RGB"), img.split()[3])
+
+    if blockID in (86,91): # jack-o-lantern
+        top = transform_image(terrain_images[102])
+        frontID = 119 if blockID == 86 else 120
+        side1 = transform_image_side(terrain_images[frontID])
+        side2 = transform_image_side(terrain_images[118]).transpose(Image.FLIP_LEFT_RIGHT)
 
         img = Image.new("RGBA", (24,24), (38,92,255,0))
 
@@ -400,9 +414,9 @@ def generate_special_texture(blockID, data):
 
         img = Image.new("RGBA", (24,24), (38,92,255,0))
 
-        img.paste(side1, (0,6), side1)
-        img.paste(side2, (12,6), side2)
-        img.paste(top, (0,0), top)
+        composite.alpha_over(img, side1, (0,6), side1)
+        composite.alpha_over(img, side2, (12,6), side2)
+        composite.alpha_over(img, top, (0,0), top)
         return (img.convert("RGB"), img.split()[3])
 
     if blockID == 65: # ladder
@@ -414,22 +428,22 @@ def generate_special_texture(blockID, data):
             # have to render this thing anyway.  same for data == 2
             tex = transform_image_side(raw_texture)
             img = Image.new("RGBA", (24,24), (38,92,255,0))
-            img.paste(tex, (0,6), tex)
+            composite.alpha_over(img, tex, (0,6), tex)
             return (img.convert("RGB"), img.split()[3])
         if data == 2:
             tex = transform_image_side(raw_texture).transpose(Image.FLIP_LEFT_RIGHT)
             img = Image.new("RGBA", (24,24), (38,92,255,0))
-            img.paste(tex, (12,6), tex)
+            composite.alpha_over(img, tex, (12,6), tex)
             return (img.convert("RGB"), img.split()[3])
         if data == 3:
             tex = transform_image_side(raw_texture).transpose(Image.FLIP_LEFT_RIGHT)
             img = Image.new("RGBA", (24,24), (38,92,255,0))
-            img.paste(tex, (0,0), tex)
+            composite.alpha_over(img, tex, (0,0), tex)
             return (img.convert("RGB"), img.split()[3])
         if data == 4:
             tex = transform_image_side(raw_texture)
             img = Image.new("RGBA", (24,24), (38,92,255,0))
-            img.paste(tex, (12,0), tex)
+            composite.alpha_over(img, tex, (12,0), tex)
             return (img.convert("RGB"), img.split()[3])
             
     if blockID in (64,71): #wooden door, or iron door
@@ -450,46 +464,76 @@ def generate_special_texture(blockID, data):
         if (data & 0x03) == 0:
             if not swung:
                 tex = transform_image_side(raw_door)
-                img.paste(tex, (0,6), tex)
+                composite.alpha_over(img, tex, (0,6), tex)
             else:
                 # flip first to set the doornob on the correct side
                 tex = transform_image_side(raw_door.transpose(Image.FLIP_LEFT_RIGHT))
                 tex = tex.transpose(Image.FLIP_LEFT_RIGHT)
-                img.paste(tex, (0,0), tex)
+                composite.alpha_over(img, tex, (0,0), tex)
         
         if (data & 0x03) == 1:
             if not swung:
                 tex = transform_image_side(raw_door).transpose(Image.FLIP_LEFT_RIGHT)
-                img.paste(tex, (0,0), tex)
+                composite.alpha_over(img, tex, (0,0), tex)
             else:
                 tex = transform_image_side(raw_door)
-                img.paste(tex, (12,0), tex)
+                composite.alpha_over(img, tex, (12,0), tex)
 
         if (data & 0x03) == 2:
             if not swung:
                 tex = transform_image_side(raw_door.transpose(Image.FLIP_LEFT_RIGHT))
-                img.paste(tex, (12,0), tex)
+                composite.alpha_over(img, tex, (12,0), tex)
             else:
                 tex = transform_image_side(raw_door).transpose(Image.FLIP_LEFT_RIGHT)
-                img.paste(tex, (12,6), tex)
+                composite.alpha_over(img, tex, (12,6), tex)
 
         if (data & 0x03) == 3:
             if not swung:
                 tex = transform_image_side(raw_door.transpose(Image.FLIP_LEFT_RIGHT)).transpose(Image.FLIP_LEFT_RIGHT)
-                img.paste(tex, (12,6), tex)
+                composite.alpha_over(img, tex, (12,6), tex)
             else:
                 tex = transform_image_side(raw_door.transpose(Image.FLIP_LEFT_RIGHT))
-                img.paste(tex, (0,6), tex)
+                composite.alpha_over(img, tex, (0,6), tex)
         
+        return (img.convert("RGB"), img.split()[3])
+    
+    if blockID == 2: # grass
+        top = transform_image(tintTexture(terrain_images[0],(170,255,50)))
+        side1 = transform_image_side(terrain_images[3])
+        side2 = transform_image_side(terrain_images[3]).transpose(Image.FLIP_LEFT_RIGHT)
+
+        img = Image.new("RGBA", (24,24), (38,92,255,0))
+
+        img.paste(side1, (0,6), side1)
+        img.paste(side2, (12,6), side2)
+        img.paste(top, (0,0), top)
+        return (img.convert("RGB"), img.split()[3])
+    
+    if blockID == 18: # leaves
+        t = tintTexture(terrain_images[52], (170, 255, 50))
+        top = transform_image(t)
+        side1 = transform_image_side(t)
+        side2 = transform_image_side(t).transpose(Image.FLIP_LEFT_RIGHT)
+
+        img = Image.new("RGBA", (24,24), (38,92,255,0))
+
+        img.paste(side1, (0,6), side1)
+        img.paste(side2, (12,6), side2)
+        img.paste(top, (0,0), top)
         return (img.convert("RGB"), img.split()[3])
     
 
     return None
 
+def tintTexture(im, c):
+    # apparently converting to grayscale drops the alpha channel?
+    i = ImageOps.colorize(ImageOps.grayscale(im), (0,0,0), c)
+    i.putalpha(im.split()[3]); # copy the alpha band back in. assuming RGBA
+    return i
 
 # This set holds block ids that require special pre-computing.  These are typically
 # things that require ancillary data to render properly (i.e. ladder plus orientation)
-special_blocks = set([66,59,61,62, 65,64,71])
+special_blocks = set([66,59,61,62, 65,64,71,91,86,2,18])
 
 # this is a map of special blockIDs to a list of all 
 # possible values for ancillary data that it might have.
@@ -501,6 +545,18 @@ special_map[62] = (0,)      # burning furnace
 special_map[65] = (2,3,4,5) # ladder
 special_map[64] = range(16) # wooden door
 special_map[71] = range(16) # iron door
+special_map[91] = range(5)  # jack-o-lantern
+special_map[86] = range(5)  # pumpkin
+# apparently pumpkins and jack-o-lanterns have ancillary data, but it's unknown
+# what that data represents.  For now, assume that the range for data is 0 to 5
+# like torches
+special_map[2] = (0,)       # grass
+special_map[18] = range(16) # leaves
+# grass and leaves are now graysacle in terrain.png
+# we treat them as special so we can manually tint them
+# it is unknown how the specific tint (biomes) is calculated
+
+# leaves have ancilary data, but its meaning is unknown (age perhaps?)
 
 specialblockmap = {}
 

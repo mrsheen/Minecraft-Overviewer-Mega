@@ -20,17 +20,41 @@ function delMarker(markername) {
     }
 }
 
+function prepareSignMarker(marker, item) {
+      
+      var c = "<div class=\"infoWindow\"><img src=\"signpost.png\" /><p>" + item.msg.replace(/\n/g,"<br/>") + "</p></div>";
+      var infowindow = new google.maps.InfoWindow({
+content: c
+});
+google.maps.event.addListener(marker, 'click', function() {
+        infowindow.open(map,marker);
+        });
+
+}
+
 
 function addMarker(item) {
     // Add marker if it doesnt exist
     // if it does, update position
 		
 		var m = reg.exec(item.timestamp),
-		ts = new Date(m[1],m[2]-1,m[3],m[4],m[5],m[6]),
-		d = new Date(),
-		diff = d.getTime() - ts.getTime(),
-		converted = fromWorldToLatLng(item.x, item.y, item.z);
+			ts = new Date(m[1],m[2]-1,m[3],m[4],m[5],m[6]),
+			d = new Date(),
+			diff = d.getTime() - ts.getTime(),
+			converted = fromWorldToLatLng(item.x, item.y, item.z);
+		
 		marker = playerMarkers[item.msg+item.id];
+		
+		
+		// a default:
+		var iconURL = 'smiley.gif';
+
+		if (item.type == 'spawn') { iconURL = 'http://google-maps-icons.googlecode.com/files/home.png';}
+		if (item.type == 'sign') { iconURL = 'signpost_icon.png';}
+
+		
+
+		
 		
 		if (marker) {
 		    if (!marker.getVisible()) {
@@ -51,7 +75,7 @@ function addMarker(item) {
 		                position: converted,
 		                map: map,
 		                title: item.msg,
-		                icon: 'smiley.gif'
+		                icon: iconURL
 		        });
 		        $('#plist').append("<span name='" + item.msg+item.id + "' onClick='gotoPlayer(\"" + item.msg+item.id + "\")'>" + item.msg + "</span><br name='" + item.msg+item.id + "' />");
 		        playerMarkers[item.msg+item.id] = marker;
@@ -61,11 +85,15 @@ function addMarker(item) {
 		                position: converted,
 		                map: map,
 		                title: item.msg + " - Idle since " + ts.toString(),
-		                icon: 'smiley.gif'
+		                icon: iconURL
 		        });
 		        $('#plist').append("<span name='" + item.msg+item.id + "' onClick='gotoPlayer(\"" + item.msg+item.id + "\")' class='idle'>" + item.msg + "</span><br name='" + item.msg+item.id + "' />");
 		        playerMarkers[item.msg+item.id] = marker;
 		    }
+			
+			if (item.type == 'sign') {
+				prepareSignMarker(marker, item);
+			}
 		}
 		
 		

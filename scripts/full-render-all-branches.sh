@@ -33,7 +33,7 @@ OUTPUT=$BRANCH_ROOT/$BRANCH/output
 # Run incremental update
 echo "Start incremental update at: $(date +%s)" >> $LOGPATH
 echo "python $GMAP --cachedir=$CACHE $WORLD $OUTPUT" >> $LOGPATH
-python $GMAP --chunklist=$CHUNKLIST --cachedir=$CACHE $WORLD $OUTPUT
+python $GMAP --cachedir=$CACHE $WORLD $OUTPUT
 if [ $? -ne 0 ]; then
    sleep 120;
    echo "python returned error, sleeping before retrying";
@@ -50,7 +50,7 @@ OUTPUT=$BRANCH_ROOT/$BRANCH/output
 # Run incremental update
 echo "Start incremental update at: $(date +%s)" >> $LOGPATH
 echo "python $GMAP --cachedir=$CACHE $WORLD $OUTPUT" >> $LOGPATH
-python $GMAP --lighting --chunklist=$CHUNKLIST --cachedir=$CACHE $WORLD $OUTPUT
+python $GMAP --lighting --cachedir=$CACHE $WORLD $OUTPUT
 if [ $? -ne 0 ]; then
    sleep 120;
    echo "python returned error, sleeping before retrying";
@@ -66,7 +66,7 @@ OUTPUT=$BRANCH_ROOT/$BRANCH/output
 # Run incremental update
 echo "Start incremental update at: $(date +%s)" >> $LOGPATH
 echo "python $GMAP --cachedir=$CACHE $WORLD $OUTPUT" >> $LOGPATH
-python $GMAP --night  --chunklist=$CHUNKLIST  --cachedir=$CACHE $WORLD $OUTPUT
+python $GMAP --night  --cachedir=$CACHE $WORLD $OUTPUT
 if [ $? -ne 0 ]; then
    sleep 120;
    echo "python returned error, sleeping before retrying";

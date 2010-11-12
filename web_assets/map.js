@@ -273,5 +273,15 @@ function initialize() {
     google.maps.event.addListener(map, 'center_changed', function() {
             makeLink();
     });
+	
+	var compassDiv = document.createElement('DIV');
+
+    compassDiv.style.padding = '5px';
+
+    var compassImg = document.createElement('IMG');
+    compassImg.src="compass.png";
+    compassDiv.appendChild(compassImg);
+
+    map.controls[google.maps.ControlPosition.TOP_RIGHT].push(compassDiv);
     
 }

@@ -26,6 +26,7 @@ import json
 import sys
 import logging
 import util
+import cPickle
 
 import nbt
 from PIL import Image
@@ -33,6 +34,7 @@ from PIL import Image
 from time import gmtime, strftime
 
 from optimizeimages import optimize_image
+import composite
 
 
 """
@@ -136,8 +138,7 @@ class QuadtreeGen(object):
         zoomlevel = self.p
         imgformat = self.imgformat
         indexpath = os.path.join(util.get_program_path(), "template.html")
-        webpagepath = os.path.join(util.get_program_path(), "webpage/")
-        
+
         ## read spawn info from level.dat
         data = nbt.load(os.path.join(worlddir, "level.dat"))[1]
         spawnX = data['Data']['SpawnX']
@@ -165,18 +166,30 @@ class QuadtreeGen(object):
         if not os.path.exists(tileDir): os.mkdir(tileDir)
         blank.save(os.path.join(tileDir, "blank."+self.imgformat))
 
+        # copy web assets into destdir:
+        for root, dirs, files in os.walk(os.path.join(util.get_program_path(), "webpage")):
+            for f in files:
+                shutil.copy(os.path.join(root, f), self.destdir)
+
         if skipjs:
             return
         
-        # Copy files needed for webpage
-        #shutil.copytree(webpagepath,self.destdir)
-        shutil.copy(os.path.join(webpagepath, "mapmarkers.js"), self.destdir)
-        shutil.copy(os.path.join(webpagepath, "map.js"), self.destdir)
-        shutil.copy(os.path.join(webpagepath, "controls.js"), self.destdir)
-        shutil.copy(os.path.join(webpagepath, "styles.css"), self.destdir)
-        shutil.copy(os.path.join(webpagepath, "smiley.gif"), self.destdir)
+        # since we will only discover PointsOfInterest in chunks that need to be 
+        # [re]rendered, POIs like signs in unchanged chunks will not be listed
+        # in self.world.POI.  To make sure we don't remove these from markers.js
+        # we need to merge self.world.POI with the persistant data in world.PersistentData
 
+        self.world.POI += filter(lambda x: x['type'] != 'spawn', self.world.persistentData['POI'])
+
+        # write out the default marker table
+        with open(os.path.join(self.destdir, "markers.js"), 'w') as output:
+            output.write("var markerData=%s" % json.dumps(self.world.POI))
         
+        # save persistent data
+        self.world.persistentData['POI'] = self.world.POI
+        with open(self.world.pickleFile,"wb") as f:
+            cPickle.dump(self.world.persistentData,f)
+
         # write out the default (empty, but documented) region table
         with open(os.path.join(self.destdir, "regions.js"), 'w') as output:
             output.write('var regionData=[\n')
@@ -584,158 +597,111 @@ def render_innertile(dest, name, imgformat, optimizeimg):
     Renders a tile at os.path.join(dest, name)+".ext" by taking tiles from
     os.path.join(dest, name, "{0,1,2,3}.png")
     """
+    imgpath = os.path.join(dest, name) + "." + imgformat
+    hashpath = os.path.join(dest, name) + ".hash"
 
+    if name == "base":
+        q0path = os.path.join(dest, "0." + imgformat)
+        q1path = os.path.join(dest, "1." + imgformat)
+        q2path = os.path.join(dest, "2." + imgformat)
+        q3path = os.path.join(dest, "3." + imgformat)
+        q0hash = os.path.join(dest, "0.hash")
+        q1hash = os.path.join(dest, "1.hash")
+        q2hash = os.path.join(dest, "2.hash")
+        q3hash = os.path.join(dest, "3.hash")
+    else:
+        q0path = os.path.join(dest, name, "0." + imgformat)
+        q1path = os.path.join(dest, name, "1." + imgformat)
+        q2path = os.path.join(dest, name, "2." + imgformat)
+        q3path = os.path.join(dest, name, "3." + imgformat)
+        q0hash = os.path.join(dest, name, "0.hash")
+        q1hash = os.path.join(dest, name, "1.hash")
+        q2hash = os.path.join(dest, name, "2.hash")
+        q3hash = os.path.join(dest, name, "3.hash")
 
-    try:
-        imgpath = os.path.join(dest, name) + ".png"
-        hashpath = os.path.join(dest, name) + ".hash"
-        
-        if name == "base":
-            q0path = os.path.join(dest, "0.png")
-            q1path = os.path.join(dest, "1.png")
-            q2path = os.path.join(dest, "2.png")
-            q3path = os.path.join(dest, "3.png")
-            q0hash = os.path.join(dest, "0.hash")
-            q1hash = os.path.join(dest, "1.hash")
-            q2hash = os.path.join(dest, "2.hash")
-            q3hash = os.path.join(dest, "3.hash")
-        else:
-            q0path = os.path.join(dest, name, "0.png")
-            q1path = os.path.join(dest, name, "1.png")
-            q2path = os.path.join(dest, name, "2.png")
-            q3path = os.path.join(dest, name, "3.png")
-            q0hash = os.path.join(dest, name, "0.hash")
-            q1hash = os.path.join(dest, name, "1.hash")
-            q2hash = os.path.join(dest, name, "2.hash")
-            q3hash = os.path.join(dest, name, "3.hash")
+    # Check which ones exist
+    if not os.path.exists(q0hash):
+        q0path = None
+        q0hash = None
+    if not os.path.exists(q1hash):
+        q1path = None
+        q1hash = None
+    if not os.path.exists(q2hash):
+        q2path = None
+        q2hash = None
+    if not os.path.exists(q3hash):
+        q3path = None
+        q3hash = None
 
-        # Check which ones exist
-        if not os.path.exists(q0hash):
-            q0path = None
-            q0hash = None
-        if not os.path.exists(q1hash):
-            q1path = None
-            q1hash = None
-        if not os.path.exists(q2hash):
-            q2path = None
-            q2hash = None
-        if not os.path.exists(q3hash):
-            q3path = None
-            q3hash = None
-
-        # do they all not exist?
-        if not (q0path or q1path or q2path or q3path):
-            if os.path.exists(imgpath):
-                os.unlink(imgpath)
-            if os.path.exists(hashpath):
-                os.unlink(hashpath)
-            return
-        
-        # Now check the hashes
-        hasher = hashlib.md5()
-        if q0hash:
-            hasher.update(open(q0hash, "rb").read())
-        if q1hash:
-            hasher.update(open(q1hash, "rb").read())
-        if q2hash:
-            hasher.update(open(q2hash, "rb").read())
-        if q3hash:
-            hasher.update(open(q3hash, "rb").read())
-        
+    # do they all not exist?
+    if not (q0path or q1path or q2path or q3path):
+        if os.path.exists(imgpath):
+            os.unlink(imgpath)
         if os.path.exists(hashpath):
-            oldhash = open(hashpath, "rb").read()
-        else:
-            oldhash = None
-        newhash = hasher.digest()
+            os.unlink(hashpath)
+        return
+    
+    # Now check the hashes
+    hasher = hashlib.md5()
+    if q0hash:
+        hasher.update(open(q0hash, "rb").read())
+    if q1hash:
+        hasher.update(open(q1hash, "rb").read())
+    if q2hash:
+        hasher.update(open(q2hash, "rb").read())
+    if q3hash:
+        hasher.update(open(q3hash, "rb").read())
+    if os.path.exists(hashpath):
+        oldhash = open(hashpath, "rb").read()
+    else:
+        oldhash = None
+    newhash = hasher.digest()
 
-        if newhash == oldhash:
-            # Nothing to do
-            return
+    if newhash == oldhash:
+        # Nothing to do
+        return
 
-        # Create the actual image now
-        img = Image.new("RGBA", (384, 384), (38,92,255,0))
+    # Create the actual image now
+    img = Image.new("RGBA", (384, 384), (38,92,255,0))
+    
+    # we'll use paste (NOT alpha_over) for quadtree generation because
+    # this is just straight image stitching, not alpha blending
+    
+    if q0path:
+        try:
+            quad0 = Image.open(q0path).resize((192,192), Image.ANTIALIAS)
+            img.paste(quad0, (0,0))
+        except Exception, e:
+            logging.warning("Couldn't open %s. It may be corrupt, you may need to delete it. %s", q0path, e)
+    if q1path:
+        try:
+            quad1 = Image.open(q1path).resize((192,192), Image.ANTIALIAS)
+            img.paste(quad1, (192,0))
+        except Exception, e:
+            logging.warning("Couldn't open %s. It may be corrupt, you may need to delete it. %s", q1path, e)
+    if q2path:
+        try:
+            quad2 = Image.open(q2path).resize((192,192), Image.ANTIALIAS)
+            img.paste(quad2, (0, 192))
+        except Exception, e:
+            logging.warning("Couldn't open %s. It may be corrupt, you may need to delete it. %s", q2path, e)
+    if q3path:
+        try:
+            quad3 = Image.open(q3path).resize((192,192), Image.ANTIALIAS)
+            img.paste(quad3, (192, 192))
+        except Exception, e:
+            logging.warning("Couldn't open %s. It may be corrupt, you may need to delete it. %s", q3path, e)
 
-
-        if q0path:
-            try:
-                quad0 = Image.open(q0path).resize((192,192), Image.ANTIALIAS)
-                img.paste(quad0, (0,0))
-            except Exception, e:
-                logging.warning("Couldn't open %s. It may be corrupt, you may need to delete it. %s", q0path, e)
-        if q1path:
-            try:
-                quad1 = Image.open(q1path).resize((192,192), Image.ANTIALIAS)
-                img.paste(quad1, (192,0))
-            except Exception, e:
-                logging.warning("Couldn't open %s. It may be corrupt, you may need to delete it. %s", q1path, e)
-        if q2path:
-            try:
-                quad2 = Image.open(q2path).resize((192,192), Image.ANTIALIAS)
-                img.paste(quad2, (0, 192))
-            except Exception, e:
-                logging.warning("Couldn't open %s. It may be corrupt, you may need to delete it. %s", q2path, e)
-        if q3path:
-            try:
-                quad3 = Image.open(q3path).resize((192,192), Image.ANTIALIAS)
-                img.paste(quad3, (192, 192))
-            except Exception, e:
-                logging.warning("Couldn't open %s. It may be corrupt, you may need to delete it. %s", q3path, e)
-
-        # Save it
-
-
-        # Save it
-        if imgformat == 'jpg':
-            img.save(imgpath, quality=95, subsampling=0)
-        else: # png
-            img.save(imgpath)
-        
+    # Save it
+    if imgformat == 'jpg':
+        img.save(imgpath, quality=95, subsampling=0)
+    else: # png
+        img.save(imgpath)
         if optimizeimg:
             optimize_image(imgpath, imgformat, optimizeimg)
-        
-        with open(hashpath, "wb") as hashout:
-            hashout.write(newhash)
-    except Exception, e:
-        # If for some reason the chunk failed to load (perhaps a previous
-        # run was canceled and the file was only written half way,
-        # corrupting it), then this could error.
-        # Since we have no easy way of determining how this chunk was
-        # generated, we need to just ignore it.
-        logging.warning("Error with file {0} -- {1}".format(dest,name))
-        logging.warning("(Error was {0})".format(e))
-        try:
-            if q0hash and os.path.exists(q0hash):
-                os.unlink(q0hash)
-            if q1hash and os.path.exists(q1hash):
-                os.unlink(q1hash)
-            if q2hash and os.path.exists(q2hash):
-                os.unlink(q2hash)
-            if q3hash and os.path.exists(q3hash):
-                os.unlink(q3hash)
 
-            if q0path and os.path.exists(q0path):
-                 os.unlink(q0path)
-            if q1path and os.path.exists(q1path):
-                 os.unlink(q1path)
-            if q2path and os.path.exists(q2path):
-                 os.unlink(q2path)
-            if q3path and os.path.exists(q3path):
-                 os.unlink(q3path)
-
-        except OSError, e:
-            import errno
-            # Ignore if file doesn't exist, another task could have already
-            # removed it.
-            if e.errno != errno.ENOENT:
-                logging.warning("Could not remove the corrupt chunks!")
-                raise
-            else:
-                logging.warning("Removed the corrupt files")
-
-            logging.warning("You will need to re-run the Overviewer to fix this tile")
-            
-        
-    
+    with open(hashpath, "wb") as hashout:
+        hashout.write(newhash)
 
 @catch_keyboardinterrupt
 def render_worldtile(chunks, colstart, colend, rowstart, rowend, path, imgformat, optimizeimg):
@@ -863,7 +829,7 @@ def render_worldtile(chunks, colstart, colend, rowstart, rowend, path, imgformat
         xpos = -192 + (col-colstart)*192
         ypos = -96 + (row-rowstart)*96
 
-        tileimg.paste(chunkimg.convert("RGB"), (xpos, ypos), chunkimg)
+        composite.alpha_over(tileimg, chunkimg.convert("RGB"), (xpos, ypos), chunkimg)
 
     # Save them
     tileimg.save(imgpath)
