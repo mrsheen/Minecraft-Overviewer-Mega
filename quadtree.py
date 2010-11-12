@@ -151,7 +151,7 @@ class QuadtreeGen(object):
         html = html.replace("{maxzoom}", str(zoomlevel))
         html = html.replace("{imgformat}", str(imgformat))
         
-        html = html.replace("{mapcenter}", str(spawnX + "," + spawnY + "," + spawnZ))
+        html = html.replace("{mapcenter}", str(str(spawnX) + "," + str(spawnY) + "," + str(spawnZ)))
         
         html = html.replace("{statustext}", str("Last Updated: "+strftime("%a, %d %b %Y %H:%M:%S %Z")))
         
@@ -169,7 +169,13 @@ class QuadtreeGen(object):
             return
         
         # Copy files needed for webpage
-        copytree(webpagepath,self.destdir)
+        #shutil.copytree(webpagepath,self.destdir)
+        shutil.copy(os.path.join(webpagepath, "mapmarkers.js"), self.destdir)
+        shutil.copy(os.path.join(webpagepath, "map.js"), self.destdir)
+        shutil.copy(os.path.join(webpagepath, "controls.js"), self.destdir)
+        shutil.copy(os.path.join(webpagepath, "styles.css"), self.destdir)
+        shutil.copy(os.path.join(webpagepath, "smiley.gif"), self.destdir)
+
         
         # write out the default (empty, but documented) region table
         with open(os.path.join(self.destdir, "regions.js"), 'w') as output:

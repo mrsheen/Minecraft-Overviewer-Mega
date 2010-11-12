@@ -1,4 +1,4 @@
-
+var urlParams = {};
 // our custom projection maps Latitude to Y, and Longitude to X as normal,
 // but it maps the range [0.0, 1.0] to [0, tileSize] in both directions
 // so it is easier to position markers, etc. based on their position

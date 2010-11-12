@@ -136,7 +136,18 @@ class WorldRenderer(object):
         self.cachedir = cachedir
 
         self.chunkset = chunkset
-
+        
+    def get_chunk_path(self, chunkX, chunkY):
+        """Returns the path to the chunk file at (chunkX, chunkY), if
+        it exists."""
+        
+        chunkFile = "%s/%s/c.%s.%s.dat" % (base36encode(chunkX % 64),
+                                           base36encode(chunkY % 64),
+                                           base36encode(chunkX),
+                                           base36encode(chunkY))
+        
+        return os.path.join(self.worlddir, chunkFile)
+    
     def go(self, procs):
         """Starts the render. This returns when it is finished"""
         
@@ -180,9 +191,7 @@ class WorldRenderer(object):
             logging.error("Error: No chunks found!")
             sys.exit(1)
         return all_chunks
-        
-
-   
+           
 
     def _render_chunks_async(self, chunks, processes):
         """Starts up a process pool and renders all the chunks asynchronously.
@@ -199,6 +208,8 @@ class WorldRenderer(object):
         
         if self.chunkset:
             logging.info("Inclusion set found, rendering only a subset of map")
+            logging.info("Total chunks to render: {0}".format(len(self.chunkset)))
+
         
         
         results = {}
