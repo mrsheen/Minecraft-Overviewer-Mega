@@ -29,11 +29,10 @@ Initial Idea
 
 Below is the initial idea I had for this fork.
 
--- start text wall --
-
-I've been chewing on an idea about a changing the application's model, which will make a big difference for maps over 500k. Core premise is to make it a continuous process, which maintains a queue of chunks to render.
 
 -- Warning: text wall below --
+
+Core premise is to make it a continuous process, which maintains a queue of chunks to render.
 
 I've found incremental rendering of anything under ~3000 chunks is completed in near-realtime when running on hardware equivalent of a 500k+ map (ie, sufficient CPU, disk IO and memory). My idea of a queue is to continually pump a list of updated chunks to a single instance of the application. We force a save-all every fifteen minutes, and will use the rsync output as the list of updated chunks.
 
