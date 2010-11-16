@@ -47,15 +47,14 @@ def main():
     parser.add_option("-z", "--zoom", dest="zoom", help="Sets the zoom level manually instead of calculating it. This can be useful if you have outlier chunks that make your world too big. This value will make the highest zoom level contain (2**ZOOM)^2 tiles", action="store", type="int")
     parser.add_option("-d", "--delete", dest="delete", help="Clear all caches. Next time you render your world, it will have to start completely over again. This is probably not a good idea for large worlds. Use this if you change texture packs and want to re-render everything.", action="store_true")
     parser.add_option("--cachedir", dest="cachedir", help="Sets the directory where the Overviewer will save chunk images, which is an intermediate step before the tiles are generated. You must use the same directory each time to gain any benefit from the cache. If not set, this defaults to your world directory.")
-    parser.add_option("--chunklist", dest="chunklist", help="A file containing, on each line, a path to a chunkfile to update. Instead of scanning the world directory for chunks, it will just use this list. Normal caching rules still apply.")
     parser.add_option("--lighting", dest="lighting", help="Renders shadows using light data from each chunk.", action="store_true")
     parser.add_option("--night", dest="night", help="Renders shadows using light data from each chunk, as if it were night. Implies --lighting.", action="store_true")
+    parser.add_option("--all-branches", dest="allbranches", help="Renders all three lighting branches", action="store_true")
     parser.add_option("--imgformat", dest="imgformat", help="The image output format to use. Currently supported: png(default), jpg. NOTE: png will always be used as the intermediate image format.")
     parser.add_option("--optimize-img", dest="optimizeimg", help="If using png, perform image file size optimizations on the output. Specify 1 for pngcrush, 2 for pngcrush+optipng+advdef. This may double (or more) render times, but will produce up to 30% smaller images. NOTE: requires corresponding programs in $PATH or %PATH%")
     parser.add_option("-q", "--quiet", dest="quiet", action="count", default=0, help="Print less output. You can specify this option multiple times.")
     parser.add_option("-v", "--verbose", dest="verbose", action="count", default=0, help="Print more output. You can specify this option multiple times.")
-    parser.add_option("--skip-js", dest="skipjs", action="store_true", help="Don't output marker.js or regions.js")
-
+    
     options, args = parser.parse_args()
 
     if len(args) < 1:
@@ -89,12 +88,6 @@ def main():
     if options.delete:
         return delete_all(cachedir, destdir)
 
-    if options.chunklist and os.path.exists(options.chunklist):
-        chunklist = open(options.chunklist, 'r')
-        chunkset = world.get_chunk_renderset(chunklist)
-    else:
-        chunkset = None
-
     if options.imgformat:
         if options.imgformat not in ('jpg','png'):
             parser.error("Unknown imgformat!")
@@ -108,23 +101,20 @@ def main():
     else:
         optimizeimg = None
 
-    logging.getLogger().setLevel(
-        logging.getLogger().level + 10*options.quiet)
-    logging.getLogger().setLevel(
-        logging.getLogger().level - 10*options.verbose)
+    logging.getLogger().setLevel(logging.getLogger().level + 10*options.quiet)
+    logging.getLogger().setLevel(logging.getLogger().level - 10*options.verbose)
 
     logging.info("Welcome to Minecraft Overviewer!")
     logging.debug("Current log level: {0}".format(logging.getLogger().level))
 
-    # First generate the world's chunk images
-    w = world.WorldRenderer(worlddir, cachedir, chunkset, lighting=options.lighting, night=options.night)
-    w.go(options.procs)
-
-    # Now generate the tiles
-    q = quadtree.QuadtreeGen(w, destdir, depth=options.zoom, imgformat=imgformat, chunkset=chunkset, optimizeimg=optimizeimg)
-    q.write_html(options.skipjs,worlddir)
-    q.go(options.procs)
-
+    # Load the full world queue from disk, or generate if its the first time
+    
+    # Load the standard and priority queues from disk if they exist
+    
+    # Start a thread to populate input queue from file contents and process
+    
+    # Start a render thread to pull chunks from first available location
+    
 def delete_all(worlddir, tiledir):
     # First delete all images in the world dir
     imgre = r"img\.[^.]+\.[^.]+\.nocave\.\w+\.png$"
