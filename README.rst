@@ -40,6 +40,7 @@ I've found incremental rendering of anything under ~3000 chunks is completed in 
 The application can sort the queue by any number of metrics, my first thought is to keep a 'priority' queue of often-used chunks. So if a chunk appears in the standard queue more than say 4 times (ie, is being updated every fifteen minutes for an hour), set it as a high priority. The app continuously takes sets of 1000 chunks from the high priority queue, and renders them (rendering surrounding chunks as needed for occlusion). When a priority chunk is rendered, a flag is set for that chunk so it can't be prioritzed again for a full threshold cycle (ie 4 more times). When the priority queue is emptied, it starts grabbing chunks from the standard queue. When the standard queue is emptied (ie, the render process catches up to all live changes), it start picking chunks from the world directory that have not appeared in the queues.
 
 Couple of notes:
+
 * process does not need to actually be run continuously, but can save state to disk and pick up where it left off, using flat files for queue input, just appending rsync output. This allows use of EC2 instances for a couple hours every day, churn through the priority chunks (which are chunks that are most active in the world, therefore more likely to be wanted rendered often), and get through as many of the standard queue and world as possible.
 
 * using some basic status metrics, you could see render rates, and how fast it is getting through the priority, updated, and world queues. From this, you can tweak the thresholds.
