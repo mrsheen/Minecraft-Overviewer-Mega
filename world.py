@@ -22,6 +22,9 @@ import sys
 import logging
 import cPickle
 
+import collections
+import time
+
 import numpy
 
 import chunk
@@ -34,6 +37,7 @@ and for extracting information about available worlds
 """
 
 base36decode = functools.partial(int, base=36)
+Chunk = collections.namedtuple('Chunk', 'col row timestamp path')
 
 def get_chunk_renderset(chunkfiles):
     """Returns a set of (col, row) chunks that should be rendered. Returns
@@ -52,8 +56,7 @@ def get_chunk_renderset(chunkfiles):
         f = os.path.basename(path)
         if f and f.startswith("c.") and f.endswith(".dat"):
             p = f.split(".")
-            chunklist.append((base36decode(p[1]), base36decode(p[2]),
-                path))
+            chunklist.append((base36decode(p[1]), base36decode(p[2]), path))
 
     # No chunks found
     if len(chunklist) == 0:
@@ -83,16 +86,16 @@ def _convert_coords(chunks):
     # columns are determined by the sum of the chunk coords, rows are the
     # difference
     item = chunks[0]
-    mincol = maxcol = item[0] + item[1]
-    minrow = maxrow = item[1] - item[0]
+    mincol = maxcol = item.col + item.row
+    minrow = maxrow = item.row - item.col
     for c in chunks:
-        col = c[0] + c[1]
+        col = c.col + c.row
         mincol = min(mincol, col)
         maxcol = max(maxcol, col)
-        row = c[1] - c[0]
+        row = c.row - c.col
         minrow = min(minrow, row)
         maxrow = max(maxrow, row)
-        chunks_translated.append((col, row, c[2]))
+        chunks_translated.append(Chunk(col, row, c.timestamp, c.path))
 
     return mincol, maxcol, minrow, maxrow, chunks_translated
 
@@ -130,19 +133,30 @@ class WorldRenderer(object):
     can pass in file handles just fine.
     """
 
-    def __init__(self, worlddir, cachedir, chunkset=None, lighting=False, night=False):
+    def __init__(self, worlddir, cachedir, allbranches=False):
         self.worlddir = worlddir
-        self.caves = False
-        self.lighting = lighting or night
-        self.night = night
-        self.cachedir = cachedir
-
-        self.chunkset = chunkset
+        self.allbranches = allbranches
+        if not os.path.exists(cachedir):
+            os.mkdir(cachedir)
+        self.cachedir = os.path.join(cachedir, "unlit") #!TODO!Replace with logic for allbranches
+        self.chunkset = None #!TODO!remove references to this
+        
+        self.lighting = False
 
         #  stores Points Of Interest to be mapped with markers
         #  a list of dictionaries, see below for an example
         self.POI = []
 
+        
+        # Load the full world queue from disk, or generate if its the first time
+        self.pickleFile = os.path.join(self.cachedir,"worldqueue.dat")
+        if os.path.exists(self.pickleFile):
+            with open(self.pickleFile,"rb") as p:
+                self.worldqueue = cPickle.load(p)
+        else:
+            # some defaults
+            self.worldqueue = self._find_chunkfiles()
+        
         # if it exists, open overviewer.dat, and read in the data structure
         # info self.persistentData.  This dictionary can hold any information
         # that may be needed between runs.
@@ -156,6 +170,7 @@ class WorldRenderer(object):
             self.persistentData = dict(POI=[])
 
         
+                
     def get_chunk_path(self, chunkX, chunkY):
         """Returns the path to the chunk file at (chunkX, chunkY), if
         it exists."""
@@ -201,8 +216,13 @@ class WorldRenderer(object):
         self.POI.append( dict(x=spawnX, y=spawnY, z=spawnZ, 
                 msg="Spawn", type="spawn", chunk=(inChunkX,inChunkZ)))
 
-    def go(self, procs):
-        """Starts the render. This returns when it is finished"""
+    def initialRender(self, procs):
+        """Starts the initial render. This returns when it is finished"""
+        
+        # Make the destination dir
+        if not os.path.exists(self.cachedir):
+            os.mkdir(self.cachedir)
+        chunk.saveUnderConstructionImage(self.cachedir)
         
         logging.info("Scanning chunks")
         raw_chunks = self._find_chunkfiles()
@@ -212,7 +232,7 @@ class WorldRenderer(object):
         mincol, maxcol, minrow, maxrow, chunks = _convert_coords(raw_chunks)
         del raw_chunks # Free some memory
 
-        self.chunkmap = self._render_chunks_async(chunks, procs)
+        self.chunkmap = self._render_chunks_async(chunks, procs, True)
 
         self.mincol = mincol
         self.maxcol = maxcol
@@ -226,10 +246,8 @@ class WorldRenderer(object):
         
         Returns a list of (chunkx, chunky, filename) where chunkx and chunky are
         given in chunk coordinates. Use convert_coords() to turn the resulting list
-        into an oblique coordinate system.
+        into an oblique coordinate system."""
         
-        Usually this scans the given worlddir, but will use the chunk list
-        given to the constructor if one was provided."""
         all_chunks = []
 
         for dirpath, dirnames, filenames in os.walk(self.worlddir):
@@ -237,8 +255,7 @@ class WorldRenderer(object):
                 for f in filenames:
                     if f.startswith("c.") and f.endswith(".dat"):
                         p = f.split(".")
-                        all_chunks.append((base36decode(p[1]), base36decode(p[2]), 
-                            os.path.join(dirpath, f)))
+                        all_chunks.append(Chunk(base36decode(p[1]), base36decode(p[2]), int(time.time()),os.path.join(dirpath, f)))
 
         if not all_chunks:
             logging.error("Error: No chunks found!")
@@ -246,7 +263,7 @@ class WorldRenderer(object):
         return all_chunks
            
 
-    def _render_chunks_async(self, chunks, processes):
+    def _render_chunks_async(self, chunks, processes, initial=False):
         """Starts up a process pool and renders all the chunks asynchronously.
 
         chunks is a list of (col, row, chunkfile)
@@ -272,16 +289,15 @@ class WorldRenderer(object):
         if processes == 1:
             # Skip the multiprocessing stuff
             logging.debug("Rendering chunks synchronously since you requested 1 process")
-            for i, (col, row, chunkfile) in enumerate(chunks):
-                if self.chunkset and (col, row) not in self.chunkset:
-                    # Skip rendering, just find where the existing image is
-                    _, imgpath = chunk.ChunkRenderer(chunkfile,
-                            self.cachedir, self, q).find_oldimage(False)
-                    if imgpath:
-                        results[(col, row)] = imgpath
-                        continue
+            for i, (col, row, timestamp, chunkfile) in enumerate(chunks):
+                # Skip rendering, just find where the existing image is
+                _, imgpath = chunk.ChunkRenderer(chunkfile,
+                        self.cachedir, self, q).find_oldimage()
+                if imgpath:
+                    results[(col, row)] = imgpath
+                    continue
 
-                result = chunk.render_and_save(chunkfile, self.cachedir, self, cave=self.caves, queue=q)
+                result = chunk.render_and_save(chunkfile, self.cachedir, self, initial=initial, queue=q)
                 results[(col, row)] = result
                 if i > 0:
                     try:
@@ -298,18 +314,17 @@ class WorldRenderer(object):
             logging.debug("Rendering chunks in {0} processes".format(processes))
             pool = multiprocessing.Pool(processes=processes)
             asyncresults = []
-            for col, row, chunkfile in chunks:
-                if self.chunkset and (col, row) not in self.chunkset:
-                    # Skip rendering, just find where the existing image is
-                    _, imgpath = chunk.ChunkRenderer(chunkfile,
-                            self.cachedir, self, q).find_oldimage(False)
-                    if imgpath:
-                        results[(col, row)] = imgpath
-                        continue
+            for col, row, timestamp, chunkfile in chunks:
+                # Skip rendering, just find where the existing image is
+                _, imgpath = chunk.ChunkRenderer(chunkfile,
+                        self.cachedir, self, q).find_oldimage()
+                if imgpath:
+                    results[(col, row)] = imgpath
+                    continue
 
                 result = pool.apply_async(chunk.render_and_save,
                         args=(chunkfile,self.cachedir,self),
-                        kwds=dict(cave=self.caves, queue=q))
+                        kwds=dict(initial=initial, queue=q))
                 asyncresults.append((col, row, result))
 
             pool.close()
@@ -334,6 +349,7 @@ class WorldRenderer(object):
 
         return results
 
+        
 def get_save_dir():
     """Returns the path to the local saves directory
       * On Windows, at %APPDATA%/.minecraft/saves/

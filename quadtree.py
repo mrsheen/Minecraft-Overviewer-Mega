@@ -120,6 +120,9 @@ class QuadtreeGen(object):
     def print_statusline(self, complete, total, level, unconditional=False):
         if unconditional:
             pass
+        elif complete < 10:
+            if not complete % 2 == 0:
+                return
         elif complete < 100:
             if not complete % 25 == 0:
                 return
@@ -133,7 +136,7 @@ class QuadtreeGen(object):
                 complete, total, level, self.p))
 
 
-    def write_html(self, skipjs=False, worlddir=None):
+    def write_html(self, worlddir=None):
         """Writes out index.html, and optionally maprefresh.js and regions.js"""
         zoomlevel = self.p
         imgformat = self.imgformat
@@ -164,6 +167,10 @@ class QuadtreeGen(object):
         blank = Image.new("RGBA", (1,1))
         tileDir = os.path.join(self.destdir, "tiles")
         if not os.path.exists(tileDir): os.mkdir(tileDir)
+        
+        tileDir = os.path.join(tileDir, "unlit") #!TODO!add logic for allbranches
+        if not os.path.exists(tileDir): os.mkdir(tileDir)
+        
         blank.save(os.path.join(tileDir, "blank."+self.imgformat))
 
         # copy web assets into destdir:
@@ -171,9 +178,6 @@ class QuadtreeGen(object):
             for f in files:
                 shutil.copy(os.path.join(root, f), self.destdir)
 
-        if skipjs:
-            return
-        
         # since we will only discover PointsOfInterest in chunks that need to be 
         # [re]rendered, POIs like signs in unchanged chunks will not be listed
         # in self.world.POI.  To make sure we don't remove these from markers.js
@@ -287,7 +291,7 @@ class QuadtreeGen(object):
             rowend = rowstart + 4
 
             # This image is rendered at:
-            dest = os.path.join(self.destdir, "tiles", *(str(x) for x in path))
+            dest = os.path.join(self.destdir, "tiles","unlit", *(str(x) for x in path))
 
             # And uses these chunks
             tilechunks = self._get_chunks_in_range(colstart, colend, rowstart,
@@ -307,7 +311,7 @@ class QuadtreeGen(object):
         """
         for path in iterate_base4(zoom):
             # This image is rendered at:
-            dest = os.path.join(self.destdir, "tiles", *(str(x) for x in path[:-1]))
+            dest = os.path.join(self.destdir, "tiles","unlit", *(str(x) for x in path[:-1]))
             name = str(path[-1])
         
             yield pool.apply_async(func=render_innertile, args= (dest, name, self.imgformat, self.optimizeimg))
@@ -344,7 +348,7 @@ class QuadtreeGen(object):
                     rowend = rowstart + 4
 
                     # This image is rendered at:
-                    dest = os.path.join(self.destdir, "tiles", *(str(x) for x in path))
+                    dest = os.path.join(self.destdir, "tiles","unlit", *(str(x) for x in path))
 
                     # And uses these chunks
                     tilechunks = self._get_chunks_in_range(colstart, colend, rowstart, rowend)
@@ -380,7 +384,7 @@ class QuadtreeGen(object):
                     
                     #print ("path : {0}").format(path)
                     # This image is rendered at:
-                    dest = os.path.join(self.destdir, "tiles", *(str(x) for x in path[:-1]))
+                    dest = os.path.join(self.destdir, "tiles","unlit", *(str(x) for x in path[:-1]))
                     name = str(path[-1])
 
                     yield pool.apply_async(func=render_innertile, args= (dest, name, self.imgformat, self.optimizeimg))
@@ -472,10 +476,10 @@ class QuadtreeGen(object):
             
             for result in self._apply_render_worldtiles(pool):
                 results.append(result)
-                if len(results) > 10000:
+                if len(results) > 1000:
                     # Empty the queue before adding any more, so that memory
                     # required has an upper bound
-                    while len(results) > 500:
+                    while len(results) > 100:
                         results.popleft().get()
                         complete += 1
                         self.print_statusline(complete, total, 1)
@@ -497,8 +501,8 @@ class QuadtreeGen(object):
                 logging.info("Starting level {0}".format(level))
                 for result in self._apply_render_inntertile(pool, zoom):
                     results.append(result)
-                    if len(results) > 10000:
-                        while len(results) > 500:
+                    if len(results) > 1000:
+                        while len(results) > 100:
                             results.popleft().get()
                             complete += 1
                             self.print_statusline(complete, total, level)
@@ -517,7 +521,7 @@ class QuadtreeGen(object):
 
         # Do the final one right here:
 
-        render_innertile(os.path.join(self.destdir, "tiles"), "base", self.imgformat, self.optimizeimg)
+        render_innertile(os.path.join(self.destdir, "tiles","unlit"), "base", self.imgformat, self.optimizeimg)
     def _get_range_by_path(self, path):
         """Returns the x, y chunk coordinates of this tile"""
         # tile/3/2/1/0/2/3/1

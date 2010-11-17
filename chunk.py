@@ -110,14 +110,14 @@ def iterate_chunkblocks(xoff,yoff):
 transparent_blocks = set([0, 6, 8, 9, 18, 20, 37, 38, 39, 40, 44, 50, 51, 52, 53,
     59, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 74, 75, 76, 77, 78, 79, 81, 83, 85])
 
-def render_and_save(chunkfile, cachedir, worldobj, cave=False, queue=None):
+def render_and_save(chunkfile, cachedir, worldobj, initial=False, queue=None):
     """Used as the entry point for the multiprocessing workers (since processes
     can't target bound methods) or to easily render and save one chunk
     
     Returns the image file location"""
     a = ChunkRenderer(chunkfile, cachedir, worldobj, queue)
     try:
-        return a.render_and_save(cave)
+        return a.render_and_save(initial)
     except ChunkCorrupt:
         # This should be non-fatal, but should print a warning
         pass
@@ -143,6 +143,11 @@ def render_and_save(chunkfile, cachedir, worldobj, cave=False, queue=None):
 class ChunkCorrupt(Exception):
     pass
 
+def saveUnderConstructionImage(cachedir):
+    # Create construction image
+    img = Image.new("RGBA", (384, 1728), (255,102,51,16))
+    img.save(os.path.join(cachedir, "underconstruction.png"))
+    
 class ChunkRenderer(object):
     def __init__(self, chunkfile, cachedir, worldobj, queue):
         """Make a new chunk renderer for the given chunkfile.
@@ -299,27 +304,27 @@ class ChunkRenderer(object):
         self._digest = digest[:6]
         return self._digest
 
-    def find_oldimage(self, cave):
+    def find_oldimage(self):
         # Get the name of the existing image. No way to do this but to look at
         # all the files
         oldimg = oldimg_path = None
         for filename in os.listdir(self.cachedir):
             if filename.startswith("img.{0}.{1}.".format(self.blockid,
-                    "cave" if cave else "nocave")) and \
+                    "nocave")) and \
                     filename.endswith(".png"):
                 oldimg = filename
                 oldimg_path = os.path.join(self.cachedir, oldimg)
                 break
         return oldimg, oldimg_path
 
-    def render_and_save(self, cave=False):
+    def render_and_save(self, initial=False):
         """Render the chunk using chunk_render, and then save it to a file in
         the same directory as the source image. If the file already exists and
         is up to date, this method doesn't render anything.
         """
         blockid = self.blockid
         
-        oldimg, oldimg_path = self.find_oldimage(cave)
+        oldimg, oldimg_path = self.find_oldimage()
 
         if oldimg:
             # An image exists? Instead of checking the hash which is kinda
@@ -340,7 +345,7 @@ class ChunkRenderer(object):
         # What /should/ the image be named, go ahead and hash the block array
         dest_filename = "img.{0}.{1}.{2}.png".format(
                 blockid,
-                "cave" if cave else "nocave",
+                "nocave",
                 self._hash_blockarray(),
                 )
 
@@ -359,8 +364,12 @@ class ChunkRenderer(object):
                 # either corrupt or out of date
                 os.unlink(oldimg_path)
 
-        # Render the chunk
-        img = self.chunk_render(cave=cave)
+        if initial:
+            # Copy under construction image
+            img = Image.open(os.path.join(os.path.split(os.path.split(self.cachedir)[0])[0], "underconstruction.png"))
+        else:        
+            # Render the chunk
+            img = self.chunk_render(False)
         # Save it
         try:
             img.save(dest_path)

@@ -99,6 +99,8 @@ def main():
     else:
         optimizeimg = None
 
+    
+    
     logging.getLogger().setLevel(logging.getLogger().level + 10*options.quiet)
     logging.getLogger().setLevel(logging.getLogger().level - 10*options.verbose)
 
@@ -106,12 +108,21 @@ def main():
     logging.debug("Current log level: {0}".format(logging.getLogger().level))
 
     # Load the full world queue from disk, or generate if its the first time
+    w = world.WorldRenderer(worlddir, cachedir, allbranches=options.allbranches)
+    w.initialRender(options.procs) #!TODO!Make this optional
+    
+    # Generate the initial tiles
+    q = quadtree.QuadtreeGen(w, destdir, depth=options.zoom, imgformat=imgformat, optimizeimg=optimizeimg)
+    q.write_html(worlddir=worlddir)
+    q.go(options.procs)
     
     # Load the standard and priority queues from disk if they exist
+    #w.loadQueues(params)
     
     # Start a thread to populate input queue from file contents and process
-    
+    #startInputQueue(w)
     # Start a render thread to pull chunks from first available location
+    #startRenderQueue(w)
     
 def delete_all(worlddir, tiledir):
     # First delete all images in the world dir
