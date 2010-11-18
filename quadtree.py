@@ -136,7 +136,7 @@ class QuadtreeGen(object):
                 complete, total, level, self.p))
 
 
-    def write_html(self, worlddir=None):
+    def write_html(self, worlddir=None, onlyindex=False):
         """Writes out index.html, and optionally maprefresh.js and regions.js"""
         zoomlevel = self.p
         imgformat = self.imgformat
@@ -162,7 +162,9 @@ class QuadtreeGen(object):
         with open(os.path.join(self.destdir, "index.html"), 'w') as output:
             output.write(html)
 
-
+        if onlyindex:
+            return
+            
         # Write a blank image
         blank = Image.new("RGBA", (1,1))
         tileDir = os.path.join(self.destdir, "tiles")

@@ -145,6 +145,7 @@ def main():
         
             # Just need to set q.chunkset to (col,row) of chunks from queue
             q.renderChunkset(options.procs, chunkset)
+            q.write_html(worlddir=worlddir,onlyindex=True)
         
         
         # Maybe exit? What is a worthwhile condition?

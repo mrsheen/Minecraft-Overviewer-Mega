@@ -23,6 +23,7 @@ import logging
 import cPickle
 
 import collections
+import datetime
 import time
 
 import numpy
@@ -158,8 +159,18 @@ class WorldRenderer(object):
             # some defaults
             self.worldqueue = self._find_chunkfiles()
         
+        
+        # Translate chunks to our diagonal coordinate system
+        mincol, maxcol, minrow, maxrow, self.worldqueue = _convert_coords(self.worldqueue)
+        
+        self.mincol = mincol
+        self.maxcol = maxcol
+        self.minrow = minrow
+        self.maxrow = maxrow
+        
         #Sort worldqueue by timestamp
         self.worldqueue = sorted(self.worldqueue, key=lambda chunk: chunk.timestamp)
+        print "worldqueue size: " + str(len(self.worldqueue))
         
         
         # if it exists, open overviewer.dat, and read in the data structure
@@ -232,16 +243,8 @@ class WorldRenderer(object):
         if initial:
             chunk.saveUnderConstructionImage(self.cachedir)
 
-        # Translate chunks to our diagonal coordinate system
-        mincol, maxcol, minrow, maxrow, chunks = _convert_coords(self.worldqueue)
+        self.chunkmap = self._render_chunks_async(self.worldqueue, procs, initial, True)
         
-        self.chunkmap = self._render_chunks_async(chunks, procs, initial, True)
-        
-
-        self.mincol = mincol
-        self.maxcol = maxcol
-        self.minrow = minrow
-        self.maxrow = maxrow
 
     def getQueueTop(self, number=1000):
         #!TODO!update timestamps here? use a deque?
@@ -251,7 +254,10 @@ class WorldRenderer(object):
         for i in range(number):
             chunk = self.worldqueue.pop(0)
             inclusion_set.add((chunk.col, chunk.row))
+            #print "worldqueue length: " + str(len(self.worldqueue))
             self.worldqueue.append(Chunk(chunk.col,chunk.row, time.time(), chunk.path))
+            #print "worldqueue length: " + str(len(self.worldqueue))
+            print "chunk time difference: " + str(datetime.timedelta(seconds=(int(time.time()) - chunk.timestamp))) + " " + str(chunk.col) + "," + str(chunk.row) + " " + chunk.path
             del chunk
             
         return inclusion_set
