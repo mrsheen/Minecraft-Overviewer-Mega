@@ -110,14 +110,14 @@ def iterate_chunkblocks(xoff,yoff):
 transparent_blocks = set([0, 6, 8, 9, 18, 20, 37, 38, 39, 40, 44, 50, 51, 52, 53,
     59, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 74, 75, 76, 77, 78, 79, 81, 83, 85])
 
-def render_and_save(chunkfile, cachedir, worldobj, initial=False, queue=None):
+def render_and_save(chunkfile, cachedir, worldobj, initial=False, queue=None, force=False):
     """Used as the entry point for the multiprocessing workers (since processes
     can't target bound methods) or to easily render and save one chunk
     
     Returns the image file location"""
     a = ChunkRenderer(chunkfile, cachedir, worldobj, queue)
     try:
-        return a.render_and_save(initial)
+        return a.render_and_save(initial=initial, force=force)
     except ChunkCorrupt:
         # This should be non-fatal, but should print a warning
         pass
@@ -317,7 +317,7 @@ class ChunkRenderer(object):
                 break
         return oldimg, oldimg_path
 
-    def render_and_save(self, initial=False):
+    def render_and_save(self, initial=False, force=False):
         """Render the chunk using chunk_render, and then save it to a file in
         the same directory as the source image. If the file already exists and
         is up to date, this method doesn't render anything.
@@ -326,7 +326,7 @@ class ChunkRenderer(object):
         
         oldimg, oldimg_path = self.find_oldimage()
 
-        if oldimg:
+        if not force and oldimg:
             # An image exists? Instead of checking the hash which is kinda
             # expensive (for tens of thousands of chunks, yes it is) check if
             # the mtime of the chunk file is newer than the mtime of oldimg
@@ -346,13 +346,13 @@ class ChunkRenderer(object):
         dest_filename = "img.{0}.{1}.{2}.png".format(
                 blockid,
                 "nocave",
-                self._hash_blockarray(),
+                "00000" if initial else self._hash_blockarray(),
                 )
 
         dest_path = os.path.join(self.cachedir, dest_filename)
 
         if oldimg:
-            if dest_filename == oldimg:
+            if not force and dest_filename == oldimg:
                 # There is an existing file, the chunk has a newer mtime, but the
                 # hashes match.
                 # Before we return it, update its mtime so the next round

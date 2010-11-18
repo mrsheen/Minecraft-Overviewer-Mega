@@ -148,6 +148,7 @@ class WorldRenderer(object):
         self.POI = []
 
         
+        
         # Load the full world queue from disk, or generate if its the first time
         self.pickleFile = os.path.join(self.cachedir,"worldqueue.dat")
         if os.path.exists(self.pickleFile):
@@ -156,6 +157,10 @@ class WorldRenderer(object):
         else:
             # some defaults
             self.worldqueue = self._find_chunkfiles()
+        
+        #Sort worldqueue by timestamp
+        self.worldqueue = sorted(self.worldqueue, key=lambda chunk: chunk.timestamp)
+        
         
         # if it exists, open overviewer.dat, and read in the data structure
         # info self.persistentData.  This dictionary can hold any information
@@ -226,16 +231,11 @@ class WorldRenderer(object):
         
         if initial:
             chunk.saveUnderConstructionImage(self.cachedir)
-        
-        logging.info("Scanning chunks")
-        raw_chunks = self._find_chunkfiles()
-        logging.debug("Done scanning chunks")
 
         # Translate chunks to our diagonal coordinate system
-        mincol, maxcol, minrow, maxrow, chunks = _convert_coords(raw_chunks)
-        del raw_chunks # Free some memory
-
-        self.chunkmap = self._render_chunks_async(chunks, procs, initial)
+        mincol, maxcol, minrow, maxrow, chunks = _convert_coords(self.worldqueue)
+        
+        self.chunkmap = self._render_chunks_async(chunks, procs, initial, True)
         
 
         self.mincol = mincol
@@ -243,9 +243,21 @@ class WorldRenderer(object):
         self.minrow = minrow
         self.maxrow = maxrow
 
+    def getQueueTop(self, number=1000):
+        #!TODO!update timestamps here? use a deque?
+        
+        # Build a set from the col, row pairs
+        inclusion_set = set()
+        for i in range(number):
+            chunk = self.worldqueue.pop(0)
+            inclusion_set.add((chunk.col, chunk.row))
+            self.worldqueue.append(Chunk(chunk.col,chunk.row, time.time(), chunk.path))
+            del chunk
+            
+        return inclusion_set
 
     def _find_chunkfiles(self):
-        """Returns a list of all the chunk file locations, and the file they
+        """Returns a deque(list) of all the chunk file locations, and the file they
         correspond to.
         
         Returns a list of (chunkx, chunky, filename) where chunkx and chunky are
@@ -259,7 +271,7 @@ class WorldRenderer(object):
                 for f in filenames:
                     if f.startswith("c.") and f.endswith(".dat"):
                         p = f.split(".")
-                        all_chunks.append(Chunk(base36decode(p[1]), base36decode(p[2]), int(time.time()),os.path.join(dirpath, f)))
+                        all_chunks.append(Chunk(base36decode(p[1]), base36decode(p[2]), int(os.path.getmtime(os.path.join(dirpath, f))),os.path.join(dirpath, f)))
 
         if not all_chunks:
             logging.error("Error: No chunks found!")
@@ -267,7 +279,7 @@ class WorldRenderer(object):
         return all_chunks
            
 
-    def _render_chunks_async(self, chunks, processes, initial=False):
+    def _render_chunks_async(self, chunks, processes, initial=False, force=False):
         """Starts up a process pool and renders all the chunks asynchronously.
 
         chunks is a list of (col, row, chunkfile)
@@ -310,7 +322,7 @@ class WorldRenderer(object):
                         results[(col, row)] = imgpath
                         continue
 
-                result = chunk.render_and_save(chunkfile, self.cachedir, self, initial=initial, queue=q)
+                result = chunk.render_and_save(chunkfile, self.cachedir, self, initial=initial, queue=q, force=force)
                 results[(col, row)] = result
                 if i > 0:
                     try:

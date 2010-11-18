@@ -109,11 +109,12 @@ def main():
 
     # Load the full world queue from disk, or generate if its the first time
     w = world.WorldRenderer(worlddir, cachedir, allbranches=options.allbranches)
-    w.renderChunkset(options.procs, True) #!TODO!Make this optional
+    w.renderChunkset(options.procs, True) #!TODO!Make initial render optional (ie fill blank tiles)
+    #!TODO!render spawn initially
     
     # Generate the initial tiles
     q = quadtree.QuadtreeGen(w, destdir, depth=options.zoom, imgformat=imgformat, optimizeimg=optimizeimg)
-    q.write_html(worlddir=worlddir)
+    q.write_html(worlddir=worlddir) #!TODO!Clean up this function
     q.renderChunkset(options.procs)
     
     # Load the standard and priority queues from disk if they exist
@@ -121,27 +122,33 @@ def main():
     
     # Start a thread to populate input queue from file contents and process
     #startInputQueue(w)
+    
     # Loop to render chunks pulled from first available location
     keepgoing = True
     while keepgoing:
         chunkset = None
         # Check for priority queue
-        # Check for standard queue
-        # Check for world queue
         if os.path.exists('somepath'):
             chunklist = open('somepath', 'r')
             chunkset = world.get_chunk_renderset(chunklist)
+        # Check for standard queue
+        elif os.path.exists('somepath'):
+            chunklist = open('somepath', 'r')
+            chunkset = world.get_chunk_renderset(chunklist)
+        # Check for world queue
+        else:
+            chunkset = w.getQueueTop(number=50)
         
         if chunkset:
             # Render chunks to cache
-            w.renderChunkset(options.procs, True, chunkset=chunkset)
+            w.renderChunkset(options.procs, False, chunkset=chunkset)
         
             # Just need to set q.chunkset to (col,row) of chunks from queue
             q.renderChunkset(options.procs, chunkset)
         
         
         # Maybe exit? What is a worthwhile condition?
-        keepgoing = False
+        #keepgoing = False
     
 def delete_all(worlddir, tiledir):
     # First delete all images in the world dir
