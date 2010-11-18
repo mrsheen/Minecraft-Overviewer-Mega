@@ -67,7 +67,7 @@ def get_chunk_renderset(chunkfiles):
 
     # Build a set from the col, row pairs
     inclusion_set = set()
-    for col, row, filename in chunklist:
+    for col, row, timestamp, filename in chunklist:
         inclusion_set.add((col, row))
         
 
@@ -216,13 +216,16 @@ class WorldRenderer(object):
         self.POI.append( dict(x=spawnX, y=spawnY, z=spawnZ, 
                 msg="Spawn", type="spawn", chunk=(inChunkX,inChunkZ)))
 
-    def initialRender(self, procs):
+    def renderChunkset(self, procs, initial=False, chunkset=None):
         """Starts the initial render. This returns when it is finished"""
-        
+        self.chunkset = chunkset
+            
         # Make the destination dir
         if not os.path.exists(self.cachedir):
             os.mkdir(self.cachedir)
-        chunk.saveUnderConstructionImage(self.cachedir)
+        
+        if initial:
+            chunk.saveUnderConstructionImage(self.cachedir)
         
         logging.info("Scanning chunks")
         raw_chunks = self._find_chunkfiles()
@@ -232,7 +235,8 @@ class WorldRenderer(object):
         mincol, maxcol, minrow, maxrow, chunks = _convert_coords(raw_chunks)
         del raw_chunks # Free some memory
 
-        self.chunkmap = self._render_chunks_async(chunks, procs, True)
+        self.chunkmap = self._render_chunks_async(chunks, procs, initial)
+        
 
         self.mincol = mincol
         self.maxcol = maxcol
@@ -290,12 +294,21 @@ class WorldRenderer(object):
             # Skip the multiprocessing stuff
             logging.debug("Rendering chunks synchronously since you requested 1 process")
             for i, (col, row, timestamp, chunkfile) in enumerate(chunks):
-                # Skip rendering, just find where the existing image is
-                _, imgpath = chunk.ChunkRenderer(chunkfile,
-                        self.cachedir, self, q).find_oldimage()
-                if imgpath:
-                    results[(col, row)] = imgpath
-                    continue
+                if self.chunkset and (col, row) not in self.chunkset:
+                    # Skip rendering, just find where the existing image is
+                    _, imgpath = chunk.ChunkRenderer(chunkfile,
+                            self.cachedir, self, q).find_oldimage()
+                    if imgpath:
+                        results[(col, row)] = imgpath
+                        continue
+                
+                if initial:
+                    # Skip rendering, just find where the existing image is
+                    _, imgpath = chunk.ChunkRenderer(chunkfile,
+                            self.cachedir, self, q).find_oldimage()
+                    if imgpath:
+                        results[(col, row)] = imgpath
+                        continue
 
                 result = chunk.render_and_save(chunkfile, self.cachedir, self, initial=initial, queue=q)
                 results[(col, row)] = result
@@ -315,12 +328,21 @@ class WorldRenderer(object):
             pool = multiprocessing.Pool(processes=processes)
             asyncresults = []
             for col, row, timestamp, chunkfile in chunks:
-                # Skip rendering, just find where the existing image is
-                _, imgpath = chunk.ChunkRenderer(chunkfile,
-                        self.cachedir, self, q).find_oldimage()
-                if imgpath:
-                    results[(col, row)] = imgpath
-                    continue
+                if self.chunkset and (col, row) not in self.chunkset:
+                    # Skip rendering, just find where the existing image is
+                    _, imgpath = chunk.ChunkRenderer(chunkfile,
+                            self.cachedir, self, q).find_oldimage()
+                    if imgpath:
+                        results[(col, row)] = imgpath
+                        continue
+                
+                if initial:
+                    # Skip rendering, just find where the existing image is
+                    _, imgpath = chunk.ChunkRenderer(chunkfile,
+                            self.cachedir, self, q).find_oldimage()
+                    if imgpath:
+                        results[(col, row)] = imgpath
+                        continue
 
                 result = pool.apply_async(chunk.render_and_save,
                         args=(chunkfile,self.cachedir,self),

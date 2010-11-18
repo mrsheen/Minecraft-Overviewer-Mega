@@ -389,12 +389,12 @@ class QuadtreeGen(object):
 
                     yield pool.apply_async(func=render_innertile, args= (dest, name, self.imgformat, self.optimizeimg))
 
-    
             
-            
-    def go(self, procs):
+    def renderChunkset(self, procs, chunkset=None):
         """Renders all tiles"""
 
+        self.chunkset = chunkset
+        
         curdepth = self._get_cur_depth()
         if curdepth != -1:
             if self.p > curdepth:
