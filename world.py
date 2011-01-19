@@ -170,7 +170,7 @@ class WorldRenderer(object):
         
         #Sort worldqueue by timestamp
         self.worldqueue = sorted(self.worldqueue, key=lambda chunk: chunk.timestamp)
-        print "worldqueue size: " + str(len(self.worldqueue))
+        #print "worldqueue size: " + str(len(self.worldqueue))
         
         
         # if it exists, open overviewer.dat, and read in the data structure
@@ -257,7 +257,7 @@ class WorldRenderer(object):
             #print "worldqueue length: " + str(len(self.worldqueue))
             self.worldqueue.append(Chunk(chunk.col,chunk.row, time.time(), chunk.path))
             #print "worldqueue length: " + str(len(self.worldqueue))
-            print "chunk time difference: " + str(datetime.timedelta(seconds=(int(time.time()) - chunk.timestamp))) + " " + str(chunk.col) + "," + str(chunk.row) + " " + chunk.path
+            #print "chunk time difference: " + str(datetime.timedelta(seconds=(int(time.time()) - chunk.timestamp))) + " " + str(chunk.col) + "," + str(chunk.row) + " " + chunk.path
             del chunk
             
         return inclusion_set

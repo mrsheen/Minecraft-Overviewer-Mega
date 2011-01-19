@@ -5,6 +5,8 @@ Based upon Andrew 'brownan' Brown's Minecraft Overviewer
 
 Modified heavily to suit large maps (500k+ chunks)
 
+! Warning, currently DOES NOT WORK. Hence 'Testing'.
+
 For brownan's package:
 
 http://github.com/brownan/Minecraft-Overviewer

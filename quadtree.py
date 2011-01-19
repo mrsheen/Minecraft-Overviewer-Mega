@@ -226,7 +226,7 @@ class QuadtreeGen(object):
 
     def _increase_depth(self):
         """Moves existing tiles into place for a larger tree"""
-        getpath = functools.partial(os.path.join, self.destdir, "tiles")
+        getpath = functools.partial(os.path.join, self.destdir, "tiles", "unlit")
 
         # At top level of the tree:
         # quadrant 0 is now 0/3
@@ -253,7 +253,7 @@ class QuadtreeGen(object):
     def _decrease_depth(self):
         """If the map size decreases, or perhaps the user has a depth override
         in effect, re-arrange existing tiles for a smaller tree"""
-        getpath = functools.partial(os.path.join, self.destdir, "tiles")
+        getpath = functools.partial(os.path.join, self.destdir, "tiles", "unlit")
 
         # quadrant 0/3 goes to 0
         # 1/2 goes to 1
