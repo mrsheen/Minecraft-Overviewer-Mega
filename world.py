@@ -57,7 +57,8 @@ def get_chunk_renderset(chunkfiles):
         f = os.path.basename(path)
         if f and f.startswith("c.") and f.endswith(".dat"):
             p = f.split(".")
-            chunklist.append((base36decode(p[1]), base36decode(p[2]), path))
+            chunklist.append(Chunk(base36decode(p[1]), base36decode(p[2]), 0,path))
+            #chunklist.append((base36decode(p[1]), base36decode(p[2]), path))
 
     # No chunks found
     if len(chunklist) == 0:
