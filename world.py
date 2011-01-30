@@ -159,9 +159,9 @@ class WorldRenderer(object):
 
         # In order to avoid having to look up the cache file names in
         # ChunkRenderer, get them all and store them here
-        for root, dirnames, filenames in os.walk(cachedir):
+        for root, dirnames, filenames in os.walk(self.cachedir):
             for filename in filenames:
-                if not filename.endswith('.png'):
+                if not filename.endswith('.png') or filename == 'underconstruction.png':
                     continue
                 dirname, dir_b = os.path.split(root)
                 _, dir_a = os.path.split(dirname)
@@ -341,7 +341,6 @@ class WorldRenderer(object):
             for i, (col, row, timestamp, chunkfile) in enumerate(chunks):
                 if self.chunkset and (col, row) not in self.chunkset:
                     # Skip rendering, just find where the existing image is
-
                     _, imgpath = chunk.find_oldimage(chunkfile, cached)
                     if imgpath:
                         results[(col, row)] = imgpath
@@ -350,7 +349,6 @@ class WorldRenderer(object):
                 if initial:
                     # Skip rendering, just find where the existing image is
                     _, imgpath = chunk.find_oldimage(chunkfile, cached)
-
                     if imgpath:
                         results[(col, row)] = imgpath
                         continue

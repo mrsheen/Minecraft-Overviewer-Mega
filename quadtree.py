@@ -815,7 +815,7 @@ def render_worldtile(chunks, colstart, colend, rowstart, rowend, path, imgformat
             # corrupting it), then this could error.
             # Since we have no easy way of determining how this chunk was
             # generated, we need to just ignore it.
-            logging.warning("Could not open chunk '{0}' ({1})".format(chunkfile,e))
+            #logging.warning("Could not open chunk '{0}' ({1})".format(chunkfile,e))
             try:
                 # Remove the file so that the next run will re-generate it.
                 os.unlink(chunkfile)
@@ -829,7 +829,7 @@ def render_worldtile(chunks, colstart, colend, rowstart, rowend, path, imgformat
             else:
                 logging.warning("Removed the corrupt file")
 
-            logging.warning("You will need to re-run the Overviewer to fix this chunk")
+            #logging.warning("You will need to re-run the Overviewer to fix this chunk")
             continue
 
         xpos = -192 + (col-colstart)*192

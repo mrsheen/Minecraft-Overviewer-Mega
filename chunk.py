@@ -122,7 +122,7 @@ fluid_blocks = set([8,9,10,11])
 # (glass, half blocks)
 nospawn_blocks = set([20,44])
 
-def find_oldimage(chunkfile, cached, cave):
+def find_oldimage(chunkfile, cached, cave=False):
     destdir, filename = os.path.split(chunkfile)
     filename_split = filename.split(".")
     blockid = ".".join(filename_split[1:3])
